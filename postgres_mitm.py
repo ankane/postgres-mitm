@@ -35,6 +35,7 @@ import textwrap
 import threading
 import time
 from collections import namedtuple
+from mitmproxy import platform
 
 # Sent by client when requesting TLS connection (this is the magic version
 # 1234.5679 of the protocol, defined in pgcomm.h)
@@ -66,7 +67,6 @@ AUTH_METHODS_REVERSE = {val: key for key, val in AUTH_METHODS.items()}
 def main():
     args = get_args()
     configure_logger(args.logging_level)
-    target_backend = args.backend
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
@@ -87,7 +87,7 @@ def main():
     try:
         while True:
             client_socket, address = sock.accept()
-            client_handler = ClientConnection(client_socket, target_backend)
+            client_handler = ClientConnection(client_socket)
             client_handler.start()
 
             threads.add(client_handler)
@@ -103,7 +103,6 @@ def main():
 
 def get_args():
     parser = argparse.ArgumentParser('postgres-mitm')
-    parser.add_argument('backend')
     parser.add_argument('-l', '--logging-level',
         choices=('debug', 'info', 'warning'), default='info')
     parser.add_argument('-p', '--port', default=5432, type=int,
@@ -132,7 +131,7 @@ def stop_threads(threads):
 
 class ClientConnection(threading.Thread):
 
-    def __init__(self, client_socket, target_backend):
+    def __init__(self, client_socket):
         super(ClientConnection, self).__init__()
         for proto in ('PROTOCOL_TLSv1_2', 'PROTOCOL_TLSv1', 'PROTOCOL_SSLv23'):
             protocol = getattr(ssl, proto, None)
@@ -144,7 +143,6 @@ class ClientConnection(threading.Thread):
         key = os.path.join(dirname, 'key.pem')
         self.ssl_context.load_cert_chain(cert, key)
         self.socket = client_socket
-        self.target_backend = target_backend
         self.server_socket = None
         self._stop = threading.Event()
 
@@ -290,6 +288,8 @@ class ClientConnection(threading.Thread):
         _logger.debug('Got auth response packet: %s' % repr(data))
 
         password = parse_password_from_authentication_packet(data)
+
+        self.target_backend = platform.original_addr(self.socket)[0]
 
         captured_uri = 'postgres://%(user)s:%(password)s@%(host)s:5432/%(database)s' % {
             'user': self.options.get('user', b'').decode('utf-8'),
