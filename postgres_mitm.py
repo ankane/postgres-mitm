@@ -287,14 +287,16 @@ class ClientConnection(threading.Thread):
         _logger.debug('Got auth response packet: %s' % repr(data))
 
         password = parse_password_from_authentication_packet(data)
+
+        captured_uri = 'postgres://%(user)s:%(password)s@%(host)s:5432/%(database)s' % {
+            'user': self.options.get('user', b'').decode('utf-8'),
+            'password': password.decode('utf-8'),
+            'host': self.target_backend,
+            'database': self.options.get('database', b'').decode('utf-8'),
+        }
+        _logger.info('Intercepted auth: %s' % captured_uri)
+
         if self.connect_to_actual_backend(password):
-            captured_uri = 'postgres://%(user)s:%(password)s@%(host)s:5432/%(database)s' % {
-                'user': self.options.get('user', b'').decode('utf-8'),
-                'password': password.decode('utf-8'),
-                'host': self.target_backend,
-                'database': self.options.get('database', b'').decode('utf-8'),
-            }
-            _logger.info('Intercepted auth: %s' % captured_uri)
             # Switch socket to non-blocking to enable messages to pass in
             # arbitrary order
             self.socket.setblocking(0)
