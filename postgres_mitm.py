@@ -139,7 +139,10 @@ class ClientConnection(threading.Thread):
             if protocol:
                 break
         self.ssl_context = ssl.SSLContext(protocol)
-        self.ssl_context.load_cert_chain('cert.pem', 'key.pem')
+        dirname = os.path.dirname(__file__)
+        cert = os.path.join(dirname, 'cert.pem')
+        key = os.path.join(dirname, 'key.pem')
+        self.ssl_context.load_cert_chain(cert, key)
         self.socket = client_socket
         self.target_backend = target_backend
         self.server_socket = None
